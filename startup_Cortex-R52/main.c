@@ -101,13 +101,21 @@ int main(void)
 #endif // TEST_SOFT_RESET
 
 #ifdef TEST_RTPS_HPPS_MMU
-    volatile uint32_t *addr = (volatile uint32_t *)0x80000000;
-
-    uint32_t val = 42;
-    printf("%p <- %u\r\n", addr, val);
+    // Translated by MMU via identity map (in HPPS LOW DRAM)
+    volatile uint32_t *addr = (volatile uint32_t *)0x8e001000;
+    uint32_t val = 0xf00dcafe;
+    printf("%p <- %08x\r\n", addr, val);
     *addr = val;
     val = *addr;
-    printf("%p -> %u\r\n", addr, val);
+    printf("%p -> %08x\r\n", addr, val);
+
+    // Translated by MMU (test configured to HPPS HIGH DRAM, 0x100000000)
+    addr = (volatile uint32_t *)0xc0000000;
+    val = 0xdeadbeef;
+    printf("%p <- %08x\r\n", addr, val);
+    *addr = val;
+    val = *addr;
+    printf("%p -> %08x\r\n", addr, val);
 #endif // TEST_RTPS_HPPS_MMU
 
     printf("Waiting for interrupt...\r\n");
