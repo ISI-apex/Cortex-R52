@@ -20,6 +20,7 @@
 #define TEST_RTPS_TRCH_MAILBOX
 #define TEST_HPPS_RTPS_MAILBOX
 // #define TEST_SOFT_RESET
+#define TEST_RTPS_HPPS_MMU
 
 extern unsigned char _text_start;
 extern unsigned char _text_end;
@@ -98,6 +99,16 @@ int main(void)
     soft_reset();
     printf("ERROR: reached unrechable code: soft reset failed\r\n");
 #endif // TEST_SOFT_RESET
+
+#ifdef TEST_RTPS_HPPS_MMU
+    volatile uint32_t *addr = (volatile uint32_t *)0x80000000;
+
+    uint32_t val = 42;
+    printf("%p <- %u\r\n", addr, val);
+    *addr = val;
+    val = *addr;
+    printf("%p -> %u\r\n", addr, val);
+#endif // TEST_RTPS_HPPS_MMU
 
     printf("Waiting for interrupt...\r\n");
     while (1) {
