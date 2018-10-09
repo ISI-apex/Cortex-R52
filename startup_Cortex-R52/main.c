@@ -51,14 +51,7 @@ void soft_reset (void)
 			     "mcr p15, 4, r1, c12, c0, 2\n"); 
 }
 
-static void send_trch_request(unsigned cmd, unsigned arg)
-{
-    uint32_t msg = ((cmd & 0x3) << 2) | (arg & 0x3); // this protocol, must match the server-side on TRCH
-    printf("sending request to TRCH: cmd %x arg %x (msg %x)\r\n", cmd, arg, msg);
-    mbox_request(RTPS_TRCH_MBOX_BASE, msg);
-}
-
-static void handle_trch_reply(void *arg, volatile uint32_t *mbox_base, unsigned msg)
+static void handle_trch_reply(void *arg, volatile uint32_t *mbox_base, uint32_t *msg)
 {
     printf("recved reply from TRCH: 0x%x\r\n", msg);
 }
@@ -96,7 +89,10 @@ int main(void)
 #ifdef TEST_RTPS_TRCH_MAILBOX /* Message flow: RTPS -> TRCH -> RTPS */
     gic_enable_irq(RTPS_TRCH_MAILBOX_IRQ_B, IRQ_TYPE_EDGE);
     mbox_init_client(RTPS_TRCH_MBOX_BASE, /* instance */ 0, MASTER_ID_RTPS_CPU0, handle_trch_reply, NULL);
-    send_trch_request(CMD_ECHO, 3);
+
+    uint32_t msg[] = { CMD_ECHO, 42 }; // the protocol, must match the server-side on TRCH
+    printf("sending request to TRCH: cmd %x arg %x\r\n", msg[0], msg[1]);
+    mbox_request(RTPS_TRCH_MBOX_BASE, &msg[0], 2);
 #endif // TEST_RTPS_TRCH_MAILBOX
 
 #ifdef TEST_HPPS_RTPS_MAILBOX /* Message flow: HPPS -> RTPS -> HPPS */
@@ -160,10 +156,10 @@ void irq_handler(unsigned irq) {
     printf("IRQ #%u\r\n", irq);
     switch (irq) {
         case RTPS_TRCH_MAILBOX_IRQ_B:
-            mbox_isr(RTPS_TRCH_MBOX_BASE, 1);
+            mbox_reply_isr(RTPS_TRCH_MBOX_BASE);
             break;
         case HPPS_RTPS_MAILBOX_IRQ_A:
-            mbox_isr(HPPS_RTPS_MBOX_BASE, 0);
+            mbox_request_isr(HPPS_RTPS_MBOX_BASE);
             break;
         default:
             printf("No ISR registered for IRQ #%u\r\n", irq);

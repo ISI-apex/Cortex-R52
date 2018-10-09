@@ -43,21 +43,21 @@
 #define REG_DESTINATION       0x1C
 #define REG_DATA              0x20
 
-#define MBOX_INT_A 0x1
-#define MBOX_INT_B 0x2
+#define HPSC_MBOX_INT_A 0x1 // in our req-reply usage model, signifies request
+#define HPSC_MBOX_INT_B 0x2 // in our req-reply usage model, signifies reply
 
 #define HPSC_MBOX_DATA_REGS 16
 #define HPSC_MBOX_INTS 2
 #define HPSC_MBOX_INSTANCES 32
 #define HPSC_MBOX_INSTANCE_REGION (REG_DATA + HPSC_MBOX_DATA_REGS * 4)
 
-typedef void (*cb_t)(void *arg, volatile uint32_t *base, unsigned msg);
+typedef void (*cb_t)(void *arg, volatile uint32_t *base, uint32_t *msg);
 
 int mbox_init_server(volatile uint32_t *ip_base, unsigned instance, uint32_t owner, uint32_t dest, cb_t req_cb, void *cb_arg);
 int mbox_init_client(volatile uint32_t *ip_base, unsigned instance, uint32_t dest, cb_t reply_cb, void *cb_arg);
-void mbox_request(volatile uint32_t *base, uint8_t msg);
-void mbox_reply(volatile uint32_t *base, uint8_t msg);
-uint8_t mbox_receive(volatile uint32_t *base);
-void mbox_isr(volatile uint32_t *ip_base, unsigned mbox_int_num);
+void mbox_request(volatile uint32_t *ip_base, uint32_t *msg, size_t len);
+void mbox_reply(volatile uint32_t *ip_base, uint32_t *msg, size_t len);
+void mbox_request_isr(volatile uint32_t *ip_base);
+void mbox_reply_isr(volatile uint32_t *ip_base);
 
 #endif // MAILBOX_H
