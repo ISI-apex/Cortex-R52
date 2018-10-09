@@ -13,14 +13,15 @@
 #include "float.h"
 #include "mailbox.h"
 #include "command.h"
+#include "busid.h"
 #include "gic.h"
 
-#define TEST_FLOAT
+// #define TEST_FLOAT
 // #define TEST_SORT
 #define TEST_RTPS_TRCH_MAILBOX
-#define TEST_HPPS_RTPS_MAILBOX
+// #define TEST_HPPS_RTPS_MAILBOX
 // #define TEST_SOFT_RESET
-#define TEST_RTPS_HPPS_MMU
+// #define TEST_RTPS_HPPS_MMU
 
 extern unsigned char _text_start;
 extern unsigned char _text_end;
@@ -48,6 +49,18 @@ void soft_reset (void)
 	unsigned long temp;
 	__asm__ __volatile__("mov r1, #2\n"
 			     "mcr p15, 4, r1, c12, c0, 2\n"); 
+}
+
+static void send_trch_request(unsigned cmd, unsigned arg)
+{
+    uint32_t msg = ((cmd & 0x3) << 2) | (arg & 0x3); // this protocol, must match the server-side on TRCH
+    printf("sending request to TRCH: cmd %x arg %x (msg %x)\r\n", cmd, arg, msg);
+    mbox_request(RTPS_TRCH_MBOX_BASE, msg);
+}
+
+static void handle_trch_reply(void *arg, volatile uint32_t *mbox_base, unsigned msg)
+{
+    printf("recved reply from TRCH: 0x%x\r\n", msg);
 }
 
 int main(void)
@@ -81,14 +94,14 @@ int main(void)
 #endif // TEST_SORT
 
 #ifdef TEST_RTPS_TRCH_MAILBOX /* Message flow: RTPS -> TRCH -> RTPS */
-    gic_enable_irq(RTPS_TRCH_MAILBOX_IRQ_0, IRQ_TYPE_EDGE);
-    mbox_init(RTPS_TRCH_MBOX0_BASE);
-    mbox_send(RTPS_TRCH_MBOX1_BASE, 0xA5);
+    gic_enable_irq(RTPS_TRCH_MAILBOX_IRQ_B, IRQ_TYPE_EDGE);
+    mbox_init_client(RTPS_TRCH_MBOX_BASE, /* instance */ 0, MASTER_ID_RTPS_CPU0, handle_trch_reply, NULL);
+    send_trch_request(CMD_ECHO, 3);
 #endif // TEST_RTPS_TRCH_MAILBOX
 
 #ifdef TEST_HPPS_RTPS_MAILBOX /* Message flow: HPPS -> RTPS -> HPPS */
-    gic_enable_irq(HPPS_RTPS_MAILBOX_IRQ_1, IRQ_TYPE_EDGE);
-    mbox_init(HPPS_RTPS_MBOX1_BASE);
+    gic_enable_irq(HPPS_RTPS_MAILBOX_IRQ_A, IRQ_TYPE_EDGE);
+    mbox_init_server(HPPS_RTPS_MBOX_BASE, /* instance */ 0, MASTER_ID_RTPS_CPU0, MASTER_ID_HPPS_CPU0, cmd_handle, NULL);
 #endif // TEST_HPPS_RTPS_MAILBOX
 
     printf("Done.\r\n");
@@ -129,26 +142,28 @@ int main(void)
 // These are in main, not in mailbox.c, because different users of mailbox.c
 // (sender vs. receiver) receive from different indexes. This way mailbox.c
 // can be shared between sender and receiver.
-void mbox_trch_have_data_isr()
+#if 0
+void mbox_trch_reply_isr()
 {
-     uint8_t msg = mbox_have_data_isr(RTPS_TRCH_MBOX0_BASE);
-     printf("rcved msg from TRCH: 0x%x\r\n", msg);
+     uint8_t msg = mbox_reply_isr(RTPS_TRCH_MBOX_BASE);
+     printf("reply from TRCH: 0x%x\r\n", msg);
 }
-void mbox_hpps_have_data_isr()
+void mbox_hpps_request_isr()
 {
-     uint8_t msg = mbox_have_data_isr(HPPS_RTPS_MBOX1_BASE);
-     printf("rcved msg from HPPS: 0x%x\r\n", msg);
-     cmd_handle(HPPS_RTPS_MBOX0_BASE, msg);
+     uint8_t msg = mbox_request_isr(HPPS_RTPS_MBOX_BASE);
+     printf("request from HPPS: 0x%x\r\n", msg);
+     cmd_handle(HPPS_RTPS_MBOX_BASE, msg);
 }
+#endif
 
 void irq_handler(unsigned irq) {
     printf("IRQ #%u\r\n", irq);
     switch (irq) {
-        case RTPS_TRCH_MAILBOX_IRQ_0:
-            mbox_trch_have_data_isr();
+        case RTPS_TRCH_MAILBOX_IRQ_B:
+            mbox_isr(RTPS_TRCH_MBOX_BASE, 1);
             break;
-        case HPPS_RTPS_MAILBOX_IRQ_1:
-            mbox_hpps_have_data_isr();
+        case HPPS_RTPS_MAILBOX_IRQ_A:
+            mbox_isr(HPPS_RTPS_MBOX_BASE, 0);
             break;
         default:
             printf("No ISR registered for IRQ #%u\r\n", irq);
