@@ -3,15 +3,6 @@
 #include "printf.h"
 #include "mailbox.h"
 
-// Mailbox has two slots:
-//   Slot 0: outgoing direction (send writes to #0)
-//   Slot 1: incoming direction (receive reads from #1)
-// So neither endpoint ever reads and writes to the same slot.
-
-// Layout of message inside a slot:
-//   bits 4-8 bits are the payload
-//   Bits 0-4 designate channel index (leftover from BCM2835 mbox)
-
 #define OFFSET_PAYLOAD 4
 
 #define MAX_HW_INSTANCES 128
