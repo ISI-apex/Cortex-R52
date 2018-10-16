@@ -4,9 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define RTPS_TRCH_MBOX_BASE	((volatile uint32_t *)0x3000a000)
-#define HPPS_RTPS_MBOX_BASE 	((volatile uint32_t *)0xf9230000)
-#define HPPS_TRCH_MBOX_BASE 	((volatile uint32_t *)0xf9220000)
+#define LSIO_MBOX_BASE ((volatile uint32_t *)0x3000a000)
+#define HPPS_MBOX_BASE ((volatile uint32_t *)0xf9220000)
 
 #define LSIO_MAILBOX_IRQ_START         72
 #define LSIO_MAILBOX_IRQ_A(instance)   (LSIO_MAILBOX_IRQ_START + (instance * 2))

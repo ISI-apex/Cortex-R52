@@ -5,22 +5,72 @@
 
 #include "command.h"
 
-void cmd_handle(void *cbarg, volatile uint32_t *mbox_base, uint32_t *msg)
+#define CMD_QUEUE_LEN 2
+#define REPLY_SIZE MAX_CMD_ARG_LEN
+
+static unsigned cmdq_head = 0;
+static unsigned cmdq_tail = 0;
+static struct cmd cmdq[CMD_QUEUE_LEN];
+
+int cmd_enqueue(struct cmd *cmd)
 {
-    unsigned cmd = msg[0];
-    unsigned arg = msg[1];
+    unsigned i;
 
-    uint32_t reply[1];
+    if (cmdq_head + 1 % CMD_QUEUE_LEN == cmdq_tail) {
+        printf("cannot enqueue command: queue full\r\n");
+        return 1;
+    }
+    cmdq_head = (cmdq_head + 1) % CMD_QUEUE_LEN;
 
-    printf("CMD handle cmd %x arg %x\r\n", cmd, arg);
+    // cmdq[cmdq_head] = *cmd; // can't because GCC inserts a memcpy
+    cmdq[cmdq_head].cmd = cmd->cmd;
+    cmdq[cmdq_head].reply_mbox = cmd->reply_mbox;
+    cmdq[cmdq_head].reply_acked = cmd->reply_acked;
+    for (i = 0; i < MAX_CMD_ARG_LEN; ++i)
+        cmdq[cmdq_head].arg[i] = cmd->arg[i];
 
-    switch (cmd) {
-        case CMD_ECHO:
-            printf("ECHO %x\r\n", arg);
-            reply[0] = arg;
-            mbox_reply(mbox_base, reply, 1);
-            break;
-        default:
-            printf("ERROR: unknown cmd: %x\r\n", cmd);
+    printf("enqueue command (tail %u head %u): cmd %u arg %u...\r\n",
+           cmdq_tail, cmdq_head, cmdq[cmdq_head].cmd, cmdq[cmdq_head].arg[0]);
+    return 0;
+}
+
+int cmd_dequeue(struct cmd *cmd)
+{
+    unsigned i;
+
+    if (cmdq_head == cmdq_tail)
+        return 1;
+
+    cmdq_tail = (cmdq_tail + 1) % CMD_QUEUE_LEN;
+
+    // *cmd = cmdq[cmdq_tail].cmd; // can't because GCC inserts a memcpy
+    cmd->cmd = cmdq[cmdq_tail].cmd;
+    cmd->reply_mbox = cmdq[cmdq_tail].reply_mbox;
+    cmd->reply_acked = cmdq[cmdq_tail].reply_acked;
+    for (i = 0; i < MAX_CMD_ARG_LEN; ++i)
+        cmd->arg[i] = cmdq[cmdq_tail].arg[i];
+    printf("dequeue command (tail %u head %u): cmd %u arg %u...\r\n",
+           cmdq_tail, cmdq_head, cmdq[cmdq_tail].cmd, cmdq[cmdq_tail].arg[0]);
+    return 0;
+}
+
+void cmd_handle(struct cmd *cmd)
+{
+    uint32_t reply[REPLY_SIZE];
+    int rc;
+
+    printf("CMD handle cmd %x arg %x...\r\n", cmd->cmd, cmd->arg[0]);
+
+    rc = server_process(cmd, &reply[1], REPLY_SIZE - 1); // 1 word for header
+
+    reply[0] = rc;
+
+    *cmd->reply_acked = false;
+    if (mbox_send(cmd->reply_mbox, &reply[1], REPLY_SIZE - 1)) {
+        printf("failed to send reply\r\n");
+    } else {
+        printf("waiting for ACK for our reply\r\n");
+        while(!*cmd->reply_acked); // block
+        printf("ACK for our reply received\r\n");
     }
 }

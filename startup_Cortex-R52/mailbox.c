@@ -76,7 +76,7 @@ struct mbox *mbox_claim_dest(volatile uint32_t * ip_base, unsigned instance, uin
     uint32_t val = *addr;
     printf("mbox_init: dest: %p -> %08lx\r\n", addr, val);
     if (val != dest) { // also enforced in HW
-        printf("mbox_claim_dest: failed to claim mailbox as dest for %lx: reserved for %lx\r\n",
+        printf("mbox_claim_dest: failed to claim mailbox %u as dest for %lx: reserved for %lx\r\n",
                instance, dest, val);
         return NULL;
     }
