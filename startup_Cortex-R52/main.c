@@ -30,8 +30,23 @@ extern unsigned char _data_end;
 extern unsigned char _bss_start;
 extern unsigned char _bss_end;
 
+#ifdef TEST_RTPS_TRCH_MAILBOX
+
+#define MBOX_TO_TRCH_INSTANCE 0
+#define MBOX_FROM_TRCH_INSTANCE 1
+
+static struct mbox *mbox_to_trch;
+static struct mbox *mbox_from_trch;
+#endif
+
 extern void enable_caches(void);
 extern void compare_sorts(void);
+
+static void panic(const char *msg)
+{
+    printf("PANIC HALT: %s\r\n", msg);
+    while (1); // halt
+}
 
 void enable_interrupts (void)
 {
@@ -51,9 +66,23 @@ void soft_reset (void)
 			     "mcr p15, 4, r1, c12, c0, 2\n"); 
 }
 
-static void handle_trch_reply(void *arg, volatile uint32_t *mbox_base, uint32_t *msg)
+static volatile bool trch_acked;
+static volatile bool trch_replied;
+static void handle_ack_from_trch(void *arg)
 {
-    printf("recved reply from TRCH: 0x%x\r\n", msg);
+    trch_acked = true; // unblock waiter
+}
+
+static void handle_reply_from_trch(void *arg, uint32_t *msg, size_t size)
+{
+    size_t i;
+
+    printf("received message from TRCH: ");
+    for (i = 0; i < size; ++i)
+        printf("%x ", msg[i]);
+    printf("\r\n");
+
+    trch_replied = true; // unblock waiter
 }
 
 int main(void)
@@ -87,12 +116,52 @@ int main(void)
 #endif // TEST_SORT
 
 #ifdef TEST_RTPS_TRCH_MAILBOX /* Message flow: RTPS -> TRCH -> RTPS */
-    gic_enable_irq(RTPS_TRCH_MAILBOX_IRQ_B, IRQ_TYPE_EDGE);
-    mbox_init_client(RTPS_TRCH_MBOX_BASE, /* instance */ 0, MASTER_ID_RTPS_CPU0, handle_trch_reply, NULL);
+
+    gic_enable_irq(LSIO_MAILBOX_IRQ_B(MBOX_TO_TRCH_INSTANCE), IRQ_TYPE_EDGE);
+
+    mbox_to_trch = mbox_claim_dest(RTPS_TRCH_MBOX_BASE, MBOX_TO_TRCH_INSTANCE, MASTER_ID_RTPS_CPU0);
+    if (!mbox_to_trch)
+        panic("failed to claim TO TRCH mailbox");
+    int rc = mbox_init_out(mbox_to_trch, handle_ack_from_trch, NULL);
+    if (rc)
+        panic("failed to init TO TRCH mailbox for outgoing");
+
+    gic_enable_irq(LSIO_MAILBOX_IRQ_A(MBOX_FROM_TRCH_INSTANCE), IRQ_TYPE_EDGE);
+
+    mbox_from_trch = mbox_claim_dest(RTPS_TRCH_MBOX_BASE, MBOX_FROM_TRCH_INSTANCE, MASTER_ID_RTPS_CPU0);
+    if (!mbox_from_trch)
+        panic("failed to claim TRCH OUT mailbox");
+    rc = mbox_init_in(mbox_from_trch, handle_reply_from_trch, NULL);
+    if (rc)
+        panic("failed to init TRCH mailbox for incomming");
+
+
+    trch_replied = false;
 
     uint32_t msg[] = { CMD_ECHO, 42 }; // the protocol, must match the server-side on TRCH
-    printf("sending request to TRCH: cmd %x arg %x\r\n", msg[0], msg[1]);
-    mbox_request(RTPS_TRCH_MBOX_BASE, &msg[0], 2);
+    printf("sending message to TRCH: cmd %x arg %x\r\n", msg[0], msg[1]);
+    rc = mbox_send(mbox_to_trch, &msg[0], 2);
+    if (rc) {
+        printf("message send to TRCH failed: rc %u\r\n", rc);
+        panic("TRCH mailbox test failed");
+    } else {
+        printf("waiting for ack from TRCH...\r\n");
+        while (!trch_acked); // set by handle_ack_from_trch callback
+        printf("ack from TRCH received\r\n");
+    }
+
+    printf("waiting for reply from TRCH...\r\n");
+    while (!trch_replied); // set by handle_reply_from_trch callback
+    printf("TRCH replied\r\n");
+
+    rc = mbox_release(mbox_to_trch);
+    if (rc)
+        panic("failed to release TO TRCH mailbox");
+
+    rc = mbox_release(mbox_from_trch);
+    if (rc)
+        panic("failed to release TO TRCH mailbox");
+
 #endif // TEST_RTPS_TRCH_MAILBOX
 
 #ifdef TEST_HPPS_RTPS_MAILBOX /* Message flow: HPPS -> RTPS -> HPPS */
@@ -155,12 +224,22 @@ void mbox_hpps_request_isr()
 void irq_handler(unsigned irq) {
     printf("IRQ #%u\r\n", irq);
     switch (irq) {
-        case RTPS_TRCH_MAILBOX_IRQ_B:
-            mbox_reply_isr(RTPS_TRCH_MBOX_BASE);
+#ifdef TEST_RTPS_TRCH_MAILBOX
+        case LSIO_MAILBOX_IRQ_B(MBOX_TO_TRCH_INSTANCE):
+            mbox_ack_isr(mbox_to_trch);
             break;
-        case HPPS_RTPS_MAILBOX_IRQ_A:
-            mbox_request_isr(HPPS_RTPS_MBOX_BASE);
+        case LSIO_MAILBOX_IRQ_A(MBOX_FROM_TRCH_INSTANCE):
+            mbox_rcv_isr(mbox_from_trch);
             break;
+#endif // TEST_RTPS_TRCH_MAILBOX
+#ifdef TEST_HPPS_RTPS_MAILBOX
+        case HPPS_MAILBOX_IRQ_A(MBOX_TO_HPPS_INSTANCE):
+            mbox_ack_isr(mbox_to_hpps);
+            break;
+        case HPPS_MAILBOX_IRQ_A(MBOX_FROM_HPPS_INSTANCE):
+            mbox_rcv_isr(mbox_from_hpps);
+            break;
+#endif // TEST_HPPS_RTPS_MAILBOX
         default:
             printf("No ISR registered for IRQ #%u\r\n", irq);
             break;
