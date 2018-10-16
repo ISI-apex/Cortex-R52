@@ -19,7 +19,7 @@ static const char *irq_type_name(irq_type_t t)
 
 void gic_enable_irq(unsigned irq, irq_type_t type) {
     volatile uint32_t *reg_addr;
-    uint8_t val;
+    uint32_t val;
 
     unsigned intid = irq + 32; /* TODO: does this offset have a name? */
 
