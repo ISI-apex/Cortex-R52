@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 #define LSIO_MBOX_BASE ((volatile uint32_t *)0x3000a000)
 #define HPPS_MBOX_BASE ((volatile uint32_t *)0xf9220000)
