@@ -274,23 +274,6 @@ int main(void)
     return 0;
 }
 
-// These are in main, not in mailbox.c, because different users of mailbox.c
-// (sender vs. receiver) receive from different indexes. This way mailbox.c
-// can be shared between sender and receiver.
-#if 0
-void mbox_trch_reply_isr()
-{
-     uint8_t msg = mbox_reply_isr(RTPS_TRCH_MBOX_BASE);
-     printf("reply from TRCH: 0x%x\r\n", msg);
-}
-void mbox_hpps_request_isr()
-{
-     uint8_t msg = mbox_request_isr(HPPS_RTPS_MBOX_BASE);
-     printf("request from HPPS: 0x%x\r\n", msg);
-     cmd_handle(HPPS_RTPS_MBOX_BASE, msg);
-}
-#endif
-
 void irq_handler(unsigned irq) {
     printf("IRQ #%u\r\n", irq);
     switch (irq) {
