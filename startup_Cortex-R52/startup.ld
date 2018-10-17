@@ -1,8 +1,8 @@
 
 MEMORY
 {
-    TCM_A (RWX) :         ORIGIN = 0x00000000, LENGTH = 0x10000
-    TCM_B (RWX) :         ORIGIN = 0x00020000, LENGTH = 0x10000
+    TCM_A (RWX) :         ORIGIN = 0x00000000, LENGTH = 0x100000
+    TCM_B (RWX) :         ORIGIN = 0x00100000, LENGTH = 0x100000
     /* TODO: TCM C (not in device tree) */
     /* TODO: DDR */
 }
