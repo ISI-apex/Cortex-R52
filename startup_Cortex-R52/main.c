@@ -115,10 +115,13 @@ static void handle_ack(void *arg)
 void handle_cmd(void *cbarg, uint32_t *msg, size_t size)
 {
     struct cmd_ctx *ctx = (struct cmd_ctx *)cbarg;
+    unsigned i;
 
-    struct cmd cmd = { .cmd = msg[0], .arg = msg[1],
+    struct cmd cmd = { .cmd = msg[0],
                        .reply_mbox = ctx->reply_mbox,
                        .reply_acked = &ctx->reply_acked };
+    for (i = 0; i < MAX_CMD_ARG_LEN && i < size - 1; ++i)
+        cmd.arg[i] = msg[1 + i];
     printf("CMD (%u, %u) from %s\r\n",
            cmd.cmd, cmd.arg, ctx->origin);
 
