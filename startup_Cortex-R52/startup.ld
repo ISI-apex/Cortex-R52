@@ -25,6 +25,7 @@ SECTIONS
     } > TCM_A
     .bss BLOCK(64) : {
         *(.bss)
+        *(COMMON)
          . = ALIGN(64);
         __data_end__ = .;
     } > TCM_A
