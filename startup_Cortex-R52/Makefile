@@ -47,7 +47,9 @@ C_OBJS = \
 	command.o \
 	server.o \
 	gic.o \
-	float.o
+	float.o \
+	panic.o \
+	test-mailbox.o \
 
 
 all: $(TARGET)
