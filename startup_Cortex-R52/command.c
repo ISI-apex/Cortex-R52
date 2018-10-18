@@ -64,12 +64,12 @@ void cmd_handle(struct cmd *cmd)
     reply_len = server_process(cmd, &reply[0], REPLY_SIZE - 1); // 1 word for header
 
     if (reply_len < 0) {
-        printf("ERROR: failed to process request: server error\n");
+        printf("ERROR: failed to process request: server error\r\n");
         return;
     }
 
     if (!reply_len) {
-        printf("server did not produce a reply for the request\n");
+        printf("server did not produce a reply for the request\r\n");
         return;
     }
 
