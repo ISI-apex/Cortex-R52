@@ -57,16 +57,24 @@ int cmd_dequeue(struct cmd *cmd)
 void cmd_handle(struct cmd *cmd)
 {
     uint32_t reply[REPLY_SIZE];
-    int rc;
+    int reply_len;
 
     printf("CMD handle cmd %x arg %x...\r\n", cmd->cmd, cmd->arg[0]);
 
-    rc = server_process(cmd, &reply[1], REPLY_SIZE - 1); // 1 word for header
+    reply_len = server_process(cmd, &reply[0], REPLY_SIZE - 1); // 1 word for header
 
-    reply[0] = rc;
+    if (reply_len < 0) {
+        printf("ERROR: failed to process request: server error\n");
+        return;
+    }
+
+    if (!reply_len) {
+        printf("server did not produce a reply for the request\n");
+        return;
+    }
 
     *cmd->reply_acked = false;
-    if (mbox_send(cmd->reply_mbox, &reply[1], REPLY_SIZE - 1)) {
+    if (mbox_send(cmd->reply_mbox, &reply[0], reply_len)) {
         printf("failed to send reply\r\n");
     } else {
         printf("waiting for ACK for our reply\r\n");
