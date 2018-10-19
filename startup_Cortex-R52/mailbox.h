@@ -5,6 +5,10 @@
 #include <stdbool.h>
 #include <unistd.h>
 
+#define HPSC_MBOX_NUM_BLOCKS 2
+#define MBOX_BLOCK_LSIO 0
+#define MBOX_BLOCK_HPPS 1
+
 #define LSIO_MBOX_BASE ((volatile uint32_t *)0x3000a000)
 #define HPPS_MBOX_BASE ((volatile uint32_t *)0xf9220000)
 
@@ -38,8 +42,7 @@ typedef void (*ack_cb_t)(void *arg);
 
 struct mbox;
 
-struct mbox *mbox_claim_owner(volatile uint32_t * ip_base, unsigned instance, uint32_t owner, uint32_t dest);
-struct mbox *mbox_claim_dest(volatile uint32_t * ip_base, unsigned instance, uint32_t dest);
+struct mbox *mbox_claim(volatile uint32_t * ip_base, unsigned instance, uint32_t owner, uint32_t dest);
 int mbox_release(struct mbox *m);
 int mbox_init_in(struct mbox *m, rcv_cb_t cb, void *cb_arg);
 int mbox_init_out(struct mbox *m, ack_cb_t cb, void *cb_arg);
@@ -47,5 +50,8 @@ int mbox_send(struct mbox *m, uint32_t *msg, size_t len);
 
 void mbox_rcv_isr(struct mbox *m);
 void mbox_ack_isr(struct mbox *m);
+
+int block_index_from_base(volatile uint32_t *base);
+int irq_from_base(volatile uint32_t *base, unsigned index, unsigned interrupt);
 
 #endif // MAILBOX_H

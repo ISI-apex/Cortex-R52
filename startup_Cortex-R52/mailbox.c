@@ -22,6 +22,25 @@ struct mbox {
 static struct mbox mboxes[MAX_HW_INSTANCES];
 static volatile unsigned num_mboxes = 0; // number of registered HW mailbox instancees
 
+int block_index_from_base(volatile uint32_t *base) {
+    switch ((unsigned)base) {
+        case (unsigned)LSIO_MBOX_BASE: return MBOX_BLOCK_LSIO;
+        case (unsigned)HPPS_MBOX_BASE: return MBOX_BLOCK_HPPS;
+                             /* assert: return value < NUM_BLOCKS */
+        default: printf("ERROR: unrecognized mbox base addr: %p", base);
+    }
+    return -1;
+}
+int irq_from_base(volatile uint32_t *base, unsigned index, unsigned interrupt) {
+    unsigned offset = index * 2 + (interrupt == HPSC_MBOX_INT_A ? 0 : 1);
+    switch ((unsigned)base) {
+        case (unsigned)HPPS_MBOX_BASE: return HPPS_MAILBOX_IRQ_START + offset;
+        case (unsigned)LSIO_MBOX_BASE: return LSIO_MAILBOX_IRQ_START + offset;
+        default: printf("ERROR: unrecognized mbox base addr: %p", base);
+    }
+    return -1;
+}
+
 static struct mbox *alloc_mbox(volatile uint32_t *ip_base, unsigned instance)
 {
     if (num_mboxes == MAX_HW_INSTANCES)
@@ -33,54 +52,40 @@ static struct mbox *alloc_mbox(volatile uint32_t *ip_base, unsigned instance)
     return &mboxes[num_mboxes - 1];
 }
 
-struct mbox *mbox_claim_owner(volatile uint32_t * ip_base, unsigned instance, uint32_t owner, uint32_t dest)
+struct mbox *mbox_claim(volatile uint32_t * ip_base, unsigned instance, uint32_t owner, uint32_t dest)
 {
-    // Assert: owner == self
-
     struct mbox *m = alloc_mbox(ip_base, instance);
     if (!m)
         return NULL;
 
-    m->owner = true;
+    m->owner = (owner != 0);
 
-    volatile uint32_t *addr = (volatile uint32_t *)((uint8_t *)m->base + REG_OWNER);
-    uint32_t val = owner;
-    printf("mbox_init: owner: %p <|- %08lx\r\n", addr, val);
-    *addr = val;
-    val = *addr;
-    if (val != owner) {
-        printf("mbox_init: failed to claim mailbox %u for %lx: already owned by %lx\r\n",
-               instance, owner, val);
-        return NULL;
+    if (m->owner) {
+        volatile uint32_t *addr = (volatile uint32_t *)((uint8_t *)m->base + REG_OWNER);
+        uint32_t val = owner;
+        printf("mbox_init: owner: %p <|- %08lx\r\n", addr, val);
+        *addr = val;
+        val = *addr;
+        if (val != owner) {
+            printf("mbox_init: failed to claim mailbox %u for %lx: already owned by %lx\r\n",
+                   instance, owner, val);
+            return NULL;
+        }
+
+        addr = (volatile uint32_t *)((uint8_t *)m->base + REG_DESTINATION);
+        val = dest;
+        printf("mbox_init: dest: %p <|- %08lx\r\n", addr, val);
+        *addr = val;
+    } else { // not owner, just check the value in registers against the requested value
+        volatile uint32_t *addr = (volatile uint32_t *)((uint8_t *)m->base + REG_DESTINATION);
+        uint32_t val = *addr;
+        printf("mbox_init: dest: %p -> %08lx\r\n", addr, val);
+        if (val != dest) { // also enforced in HW
+            printf("mbox_claim_dest: failed to claim mailbox %u as dest for %lx: reserved for %lx\r\n",
+                   instance, dest, val);
+            return NULL;
+        }
     }
-
-    addr = (volatile uint32_t *)((uint8_t *)m->base + REG_DESTINATION);
-    val = dest;
-    printf("mbox_init: dest: %p <|- %08lx\r\n", addr, val);
-    *addr = val;
-
-    return m;
-}
-
-struct mbox *mbox_claim_dest(volatile uint32_t * ip_base, unsigned instance, uint32_t dest)
-{
-    // Assert: self == DESTINATION
-
-    struct mbox *m= alloc_mbox(ip_base, instance);
-    if (!m)
-        return NULL;
-
-    m->owner = false;
-
-    volatile uint32_t *addr = (volatile uint32_t *)((uint8_t *)m->base + REG_DESTINATION);
-    uint32_t val = *addr;
-    printf("mbox_init: dest: %p -> %08lx\r\n", addr, val);
-    if (val != dest) { // also enforced in HW
-        printf("mbox_claim_dest: failed to claim mailbox %u as dest for %lx: reserved for %lx\r\n",
-               instance, dest, val);
-        return NULL;
-    }
-
     return m;
 }
 
@@ -93,6 +98,8 @@ int mbox_release(struct mbox *m)
         uint32_t val = 0;
         printf("mbox_init: owner: %p <|- %08lx\r\n", addr, val);
         *addr = val;
+
+        // clearing owner also clears destination (resets the instance)
     }
 
     return 0;

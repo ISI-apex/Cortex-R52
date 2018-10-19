@@ -49,7 +49,7 @@ C_OBJS = \
 	gic.o \
 	float.o \
 	panic.o \
-	test-mailbox.o \
+	mailbox-link.o \
 
 
 all: $(TARGET)

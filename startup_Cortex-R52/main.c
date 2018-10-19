@@ -15,7 +15,7 @@
 #include "command.h"
 #include "busid.h"
 #include "panic.h"
-#include "test-mailbox.h"
+#include "mailbox-link.h"
 
 // #define TEST_FLOAT
 // #define TEST_SORT
@@ -83,11 +83,34 @@ int main(void)
 #endif // TEST_SORT
 
 #ifdef TEST_RTPS_TRCH_MAILBOX
-    test_rtps_trch_mailbox();
+    struct mbox_link *rtps_link = mbox_link_connect(LSIO_MBOX_BASE,
+                    /* from mbox */ 1, /* to mbox */ 0,
+                    /* owner */ 0, /* dest  */ MASTER_ID_RTPS_CPU0,
+                    /* endpoint */ "TRCH");
+    if (!rtps_link)
+        panic("RTPS link");
+
+    unsigned cmd = CMD_ECHO;
+    uint32_t arg[] = { 42 };
+    uint32_t reply[sizeof(arg) / sizeof(arg[0])] = {0};
+    printf("arg len: %u\r\n", sizeof(arg) / sizeof(arg[0]));
+    int rc = mbox_link_request(rtps_link, cmd, arg, sizeof(arg) / sizeof(arg[0]),
+                               reply, sizeof(reply) / sizeof(reply[0]));
+    if (rc)
+        panic("request to RTPS link");
+
+    if (mbox_link_disconnect(rtps_link))
+        panic("RTPS link release");
 #endif // TEST_RTPS_TRCH_MAILBOX
 
 #ifdef TEST_HPPS_RTPS_MAILBOX
-    setup_hpps_rtps_mailbox();
+    struct mbox_link *hpps_link = mbox_link_connect(HPPS_MBOX_BASE,
+                    /* from mbox */ 2, /* to mbox */ 3,
+                    /* owner */ MASTER_ID_RTPS_CPU0, /* dest  */ MASTER_ID_HPPS_CPU0,
+                    /* endpoint */ "HPPS");
+    if (!hpps_link)
+        panic("HPPS link");
+    // Never release the link, because we listen on it in main loop
 #endif // TEST_HPPS_RTPS_MAILBOX
 
     printf("Done.\r\n");
@@ -132,27 +155,40 @@ int main(void)
     return 0;
 }
 
+static bool handle_mbox_irq(unsigned irq)
+{
+    int mbox_block, mbox_irq_offset;
+
+    if (LSIO_MAILBOX_IRQ_START <= irq <= LSIO_MAILBOX_IRQ_START + HPSC_MBOX_INSTANCES * HPSC_MBOX_INTS) {
+        mbox_block = MBOX_BLOCK_LSIO;
+        mbox_irq_offset = irq - LSIO_MAILBOX_IRQ_START;
+    } else if (HPPS_MAILBOX_IRQ_START <= irq <= HPPS_MAILBOX_IRQ_START + HPSC_MBOX_INSTANCES * HPSC_MBOX_INTS) {
+        mbox_block = MBOX_BLOCK_HPPS;
+        mbox_irq_offset = irq - HPPS_MAILBOX_IRQ_START;
+    } else {
+        return false;
+    }
+
+    int instance_idx = mbox_irq_offset / 2;
+    struct mbox *mbox = mboxes[mbox_block][instance_idx];
+    printf("mbox %s ISR: block %d idx %d mbox %p\r\n",
+            (mbox_irq_offset % 2 ? "ACK" : "RCV"), mbox_block, instance_idx, mbox);
+
+    if (mbox_irq_offset % 2 == 0)
+        mbox_rcv_isr(mbox);
+    else
+        mbox_ack_isr(mbox);
+    return true;
+}
+
 void irq_handler(unsigned irq) {
     printf("IRQ #%u\r\n", irq);
     switch (irq) {
-#ifdef TEST_RTPS_TRCH_MAILBOX
-        case LSIO_MAILBOX_IRQ_B(MBOX_TO_TRCH_INSTANCE):
-            mbox_ack_isr(mbox_to_trch);
-            break;
-        case LSIO_MAILBOX_IRQ_A(MBOX_FROM_TRCH_INSTANCE):
-            mbox_rcv_isr(mbox_from_trch);
-            break;
-#endif // TEST_RTPS_TRCH_MAILBOX
-#ifdef TEST_HPPS_RTPS_MAILBOX
-        case HPPS_MAILBOX_IRQ_B(MBOX_TO_HPPS_INSTANCE):
-            mbox_ack_isr(mbox_to_hpps);
-            break;
-        case HPPS_MAILBOX_IRQ_A(MBOX_FROM_HPPS_INSTANCE):
-            mbox_rcv_isr(mbox_from_hpps);
-            break;
-#endif // TEST_HPPS_RTPS_MAILBOX
+        /* other IRQ nums */
         default:
-            printf("No ISR registered for IRQ #%u\r\n", irq);
+            if (!handle_mbox_irq(irq)) { // a range, so not cases
+                printf("No ISR registered for IRQ #%u\r\n", irq);
+            }
             break;
     }
 }
