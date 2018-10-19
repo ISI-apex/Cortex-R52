@@ -58,7 +58,8 @@ all: $(TARGET)
 rebuild: clean all
 
 clean:
-	$(call RM,*.o,*.d)
+	$(call RM,*.o)
+	$(call RM,*.d)
 	$(call RM,$(TARGET))
 
 
