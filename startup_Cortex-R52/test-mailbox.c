@@ -2,7 +2,7 @@
 
 #include "mailbox.h"
 #include "command.h"
-#include "gic.h"
+#include "intc.h"
 #include "printf.h"
 #include "busid.h"
 #include "panic.h"
@@ -70,13 +70,13 @@ void test_rtps_trch_mailbox() {
 
     // Message flow: RTPS (request) -> TRCH (reply) -> RTPS
 
-    gic_enable_irq(LSIO_MAILBOX_IRQ_B(MBOX_TO_TRCH_INSTANCE), IRQ_TYPE_EDGE);
+    intc_int_enable(LSIO_MAILBOX_IRQ_B(MBOX_TO_TRCH_INSTANCE), IRQ_TYPE_EDGE);
 
     mbox_to_trch = mbox_claim_dest(LSIO_MBOX_BASE, MBOX_TO_TRCH_INSTANCE, MASTER_ID_RTPS_CPU0);
     if (!mbox_to_trch)
         panic("failed to claim TO TRCH mailbox");
 
-    gic_enable_irq(LSIO_MAILBOX_IRQ_A(MBOX_FROM_TRCH_INSTANCE), IRQ_TYPE_EDGE);
+    intc_int_enable(LSIO_MAILBOX_IRQ_A(MBOX_FROM_TRCH_INSTANCE), IRQ_TYPE_EDGE);
 
     mbox_from_trch = mbox_claim_dest(LSIO_MBOX_BASE, MBOX_FROM_TRCH_INSTANCE, MASTER_ID_RTPS_CPU0);
     if (!mbox_from_trch)
@@ -119,13 +119,13 @@ void test_rtps_trch_mailbox() {
 void setup_hpps_rtps_mailbox() {
     // Message flow: HPPS (request) -> RTPS (reply) -> HPPS
 
-    gic_enable_irq(HPPS_MAILBOX_IRQ_B(MBOX_TO_HPPS_INSTANCE), IRQ_TYPE_EDGE);
+    intc_int_enable(HPPS_MAILBOX_IRQ_B(MBOX_TO_HPPS_INSTANCE), IRQ_TYPE_EDGE);
 
     mbox_to_hpps = mbox_claim_owner(HPPS_MBOX_BASE, MBOX_TO_HPPS_INSTANCE, MASTER_ID_RTPS_CPU0, MASTER_ID_HPPS_CPU0);
     if (!mbox_to_hpps)
         panic("failed to claim TO HPPS mailbox");
 
-    gic_enable_irq(HPPS_MAILBOX_IRQ_A(MBOX_FROM_HPPS_INSTANCE), IRQ_TYPE_EDGE);
+    intc_int_enable(HPPS_MAILBOX_IRQ_A(MBOX_FROM_HPPS_INSTANCE), IRQ_TYPE_EDGE);
 
     mbox_from_hpps = mbox_claim_owner(HPPS_MBOX_BASE, MBOX_FROM_HPPS_INSTANCE, MASTER_ID_RTPS_CPU0, MASTER_ID_HPPS_CPU0);
     if (!mbox_from_hpps)
