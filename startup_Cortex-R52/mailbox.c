@@ -5,9 +5,10 @@
 
 #define OFFSET_PAYLOAD 4
 
-#define MAX_HW_INSTANCES 128
+#define MAX_HW_INSTANCES 64
 
 struct mbox {
+        bool valid; // for storing in an array
         volatile uint32_t *ip_base;
         volatile uint32_t *base;
         unsigned instance;
@@ -41,23 +42,47 @@ int irq_from_base(volatile uint32_t *base, unsigned index, unsigned interrupt) {
     return -1;
 }
 
-static struct mbox *alloc_mbox(volatile uint32_t *ip_base, unsigned instance)
+static void mbox_clear(struct mbox *mbox)
 {
-    if (num_mboxes == MAX_HW_INSTANCES)
+    // Not strictly necessary, but to easy debugging
+    // We don't have a memset
+    mbox->ip_base = 0;
+    mbox->base = 0;
+    mbox->instance = 0;
+    mbox->owner = false;
+    mbox->cb.rcv_cb = NULL;
+    mbox->cb_arg = NULL;
+}
+
+static struct mbox *mbox_alloc()
+{
+    struct mbox *mbox;
+    unsigned i = 0;
+    while (mboxes[i].valid && i < MAX_HW_INSTANCES)
+        ++i;
+    if (i == MAX_HW_INSTANCES)
         return NULL;
-    mboxes[num_mboxes].ip_base = ip_base;
-    mboxes[num_mboxes].instance = instance;
-    mboxes[num_mboxes].base = (volatile uint32_t *)((uint8_t *)ip_base + instance * HPSC_MBOX_INSTANCE_REGION);
-    num_mboxes++;
-    return &mboxes[num_mboxes - 1];
+    mbox = &mboxes[i];
+    mbox_clear(mbox);
+    mbox->valid = true;
+    return mbox;
+}
+
+static void mbox_free(struct mbox *mbox)
+{
+    mbox->valid = false;
+    mbox_clear(mbox);
 }
 
 struct mbox *mbox_claim(volatile uint32_t * ip_base, unsigned instance, uint32_t owner, uint32_t dest)
 {
-    struct mbox *m = alloc_mbox(ip_base, instance);
+    struct mbox *m = mbox_alloc();
     if (!m)
         return NULL;
 
+    m->ip_base = ip_base;
+    m->instance = instance;
+    m->base = (volatile uint32_t *)((uint8_t *)ip_base + instance * HPSC_MBOX_INSTANCE_REGION);
     m->owner = (owner != 0);
 
     if (m->owner) {
@@ -102,6 +127,7 @@ int mbox_release(struct mbox *m)
         // clearing owner also clears destination (resets the instance)
     }
 
+    mbox_free(m);
     return 0;
 }
 
