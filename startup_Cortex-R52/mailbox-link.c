@@ -96,7 +96,7 @@ static struct mbox_link *link_alloc()
     link = &links[i];
     link_clear(link);
     link->valid = true;
-    return &links[i];
+    return link;
 }
 
 static void link_free(struct mbox_link *link)
