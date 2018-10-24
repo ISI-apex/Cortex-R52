@@ -3,7 +3,6 @@
 #include "mailbox.h"
 #include "command.h"
 #include "printf.h"
-#include "intc.h"
 #include "busid.h"
 #include "panic.h"
 
@@ -17,16 +16,12 @@ struct cmd_ctx {
     uint32_t *reply;
     size_t reply_sz;
     size_t reply_len;
-    const char *endpoint; // for pretty-print
 };
 
 struct mbox_link {
     bool valid; // is entry in the array full
-    unsigned block;
     unsigned idx_to;
     unsigned idx_from;
-    unsigned rcv_irq;
-    unsigned ack_irq;
     struct mbox *mbox_from;
     struct mbox *mbox_to;
     struct cmd_ctx cmd_ctx;
@@ -35,13 +30,10 @@ struct mbox_link {
 static struct mbox_link links[MAX_LINKS] = {0};
 static uint32_t req_msg[HPSC_MBOX_DATA_REGS];
 
-// For ISRs, we need mbox pointers in a table
-struct mbox *mboxes[HPSC_MBOX_NUM_BLOCKS][HPSC_MBOX_INSTANCES];
-
 static void handle_ack(void *arg)
 {
     struct cmd_ctx *ctx = (struct cmd_ctx *)arg;
-    printf("ACK from %s\r\n", ctx->endpoint);
+    printf("rcved ACK\r\n");
     ctx->tx_acked = true;
 }
 
@@ -57,7 +49,7 @@ static void handle_cmd(void *arg, uint32_t *msg, size_t size)
     for (i = 0; i < HPSC_MBOX_DATA_REGS - 1 && i < size - 1; ++i)
         cmd.arg[i] = msg[1 + i];
 
-    printf("CMD (%u, %u ...) from %s\r\n", cmd.cmd, cmd.arg[0], ctx->endpoint);
+    printf("rcved CMD (%u, %u ...)\r\n", cmd.cmd, cmd.arg[0]);
 
     if (cmd_enqueue(&cmd))
         panic("failed to enqueue command");
@@ -76,11 +68,8 @@ static void handle_reply(void *arg, uint32_t *msg, size_t size)
 static void link_clear(struct mbox_link *link)
 {
     // We don't have a libc, so no memset
-    link->block = 0;
     link->idx_to = 0;
     link->idx_from = 0;
-    link->rcv_irq = 0;
-    link->ack_irq = 0;
     link->mbox_from = NULL;
     link->mbox_to = NULL;
 }
@@ -105,9 +94,11 @@ static void link_free(struct mbox_link *link)
     link_clear(link);
 }
 
-struct mbox_link *mbox_link_connect(volatile uint32_t *base,
+struct mbox_link *mbox_link_connect(
+        volatile uint32_t *base, unsigned irq_base,
         unsigned idx_from, unsigned idx_to,
-        unsigned owner, unsigned dest, const char *endpoint)
+        unsigned rcv_int_idx, unsigned ack_int_idx, /* interrupt index within IP block */
+        unsigned server, unsigned client)
 {
     struct mbox_link *link = link_alloc();
     if (!link) {
@@ -115,66 +106,38 @@ struct mbox_link *mbox_link_connect(volatile uint32_t *base,
         return NULL;
     }
 
-    link->block = block_index_from_base(base);
     link->idx_from = idx_from;
     link->idx_to = idx_to;
 
-    link->rcv_irq = irq_from_base(base, idx_from, HPSC_MBOX_INT_A);
-    link->ack_irq = irq_from_base(base, idx_to, HPSC_MBOX_INT_B);
-
-    if (link->rcv_irq < 0 || link->ack_irq < 0)
-        return NULL;
-
-    intc_int_enable(link->rcv_irq, IRQ_TYPE_EDGE);
-
-    link->mbox_from = mbox_claim(base, idx_from, owner, dest);
+    union mbox_cb rcv_cb = { .rcv_cb = server ? handle_cmd : handle_reply };
+    link->mbox_from = mbox_claim(base, irq_base, idx_from, rcv_int_idx,
+                                 server, client, server, MBOX_INCOMING,
+                                 rcv_cb, &link->cmd_ctx);
     if (!link->mbox_from)
         return NULL;
 
-    intc_int_enable(link->ack_irq, IRQ_TYPE_EDGE);
-
-    link->mbox_to = mbox_claim(base, idx_to, owner, dest);
+    union mbox_cb ack_cb = { .ack_cb = handle_ack };
+    link->mbox_to = mbox_claim(base, irq_base, idx_to, ack_int_idx,
+                               server, server, client, MBOX_OUTGOING,
+                               ack_cb, &link->cmd_ctx);
     if (!link->mbox_to) {
         mbox_release(link->mbox_from);
         return NULL;
     }
 
-    // For ISR
-    mboxes[link->block][link->idx_from] = link->mbox_from;
-    mboxes[link->block][link->idx_to] = link->mbox_to;
-    printf("b %u i %u mp %p m %p m %p\r\n", link->block, link->idx_from, &mboxes[link->block][link->idx_from], mboxes[link->block][link->idx_from], link->mbox_from);
-
-    link->cmd_ctx.endpoint = endpoint;
     link->cmd_ctx.reply_mbox = link->mbox_to;
     link->cmd_ctx.tx_acked = false;
     link->cmd_ctx.reply = NULL;
 
-    if (mbox_init_in(link->mbox_from, owner ? handle_cmd : handle_reply, &link->cmd_ctx))
-        goto fail;
-    if (mbox_init_out(link->mbox_to, handle_ack, &link->cmd_ctx))
-        goto fail;
-
-    printf("b %u i %u mp %p m %p m %p\r\n", link->block, link->idx_from, &mboxes[link->block][link->idx_from], mboxes[link->block][link->idx_from], link->mbox_from);
     return link;
-
-fail:
-    mbox_release(link->mbox_from);
-    mbox_release(link->mbox_to);
-    return NULL;
 }
 
 int mbox_link_disconnect(struct mbox_link *link) {
     int rc;
 
-    intc_int_disable(link->rcv_irq);
-    intc_int_disable(link->ack_irq);
-
     // in case of failure, keep going and fwd code
     rc = mbox_release(link->mbox_from);
     rc = mbox_release(link->mbox_to);
-
-    mboxes[link->block][link->idx_from] = NULL;
-    mboxes[link->block][link->idx_to] = NULL;
 
     link_free(link);
     return rc;
@@ -212,7 +175,7 @@ int mbox_link_request(struct mbox_link *link, unsigned cmd,
     while (!link->cmd_ctx.reply_len);
     printf("req: reply received\r\n");
 
-    printf("REPLY from %s: ", link->cmd_ctx.endpoint);
+    printf("rcved REPLY: ");
     for (i = 0; i < link->cmd_ctx.reply_len; ++i)
         printf("%u ", reply[i]);
     printf("\r\n");
