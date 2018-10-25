@@ -1,9 +1,14 @@
 #ifndef MAILBOX_MAP_H
 #define MAILBOX_MAP_H
 
-// These allocations are completely outside the scope of the mailbox driver and
-// of the mailbox link.  They are referenced only from the top-level app code
-// (both TRCH and RTPS) -- namely, main and sever.
+// Chiplet-wide allocations of the mailbox resources. This file is exists in
+// code bases for all subsystems: TRCH, RTPS, HPPS (included from Linux DT).
+// For practical reasons, there are multiple copies of the file, but they
+// should all be in sync (i.e. identical).
+
+// In the context of TRCH, RTPS, these allocations are completely outside the
+// scope of the mailbox driver and of the mailbox link.  They are referenced
+// only from the top-level app code -- namely, main and sever.
 //
 // This file included from both RTPS and TRCH code, to minimize possibility
 // of conflicting assignments.
