@@ -5,7 +5,7 @@
 
 #include "command.h"
 
-#define CMD_QUEUE_LEN 2
+#define CMD_QUEUE_LEN 4
 #define REPLY_SIZE MAX_CMD_ARG_LEN
 
 static unsigned cmdq_head = 0;
