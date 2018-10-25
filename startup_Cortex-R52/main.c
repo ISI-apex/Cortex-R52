@@ -149,7 +149,7 @@ int main(void)
 
 #ifdef TEST_HPPS_RTPS_MAILBOX
         struct cmd cmd;
-        if (!cmd_dequeue(&cmd))
+        while (!cmd_dequeue(&cmd))
             cmd_handle(&cmd);
 #endif // TEST_HPPS_RTPS_MAILBOX
 
