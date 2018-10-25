@@ -23,8 +23,8 @@
 #define MBOX_HPPS_RTPS_HPPS 3
 
 // Mailboxes owned by Linux (just a test)
-#define MBOX_HPPS_HPPS_OWN_RTPS 4
-#define MBOX_HPPS_HPPS_OWN_HPPS 5
+#define MBOX_HPPS_HPPS_OWN_TRCH 4
+#define MBOX_HPPS_TRCH_HPPS_OWN 5
 
 #define MBOX_HPPS_HPPS_TRCH_SSW 30
 #define MBOX_HPPS_TRCH_HPPS_SSW 31
