@@ -94,7 +94,7 @@ struct mbox *mbox_claim(volatile uint32_t * ip_base, unsigned irq_base,
                         uint32_t owner, uint32_t src, uint32_t dest,
                         enum mbox_dir dir, union mbox_cb cb, void *cb_arg)
 {
-    printf("mbox claim: ip %x irq base %u instance %u int %u owner %u src %u dest %u dir %u\r\n",
+    printf("mbox claim: ip %x irq base %u instance %u int %u owner %x src %x dest %x dir %u\r\n",
            ip_base, irq_base, instance, int_idx, owner, src, dest, dir);
 
     struct mbox *m = mbox_alloc();
