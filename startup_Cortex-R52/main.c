@@ -23,7 +23,7 @@
 #define TEST_RTPS_TRCH_MAILBOX
 #define TEST_HPPS_RTPS_MAILBOX
 // #define TEST_SOFT_RESET
-// #define TEST_RTPS_HPPS_MMU
+#define TEST_RTPS_HPPS_MMU
 
 extern unsigned char _text_start;
 extern unsigned char _text_end;
@@ -83,6 +83,26 @@ int main(void)
     compare_sorts();
 #endif // TEST_SORT
 
+#ifdef TEST_RTPS_HPPS_MMU
+    printf("Testing MMU...\r\n");
+
+    // Translated by MMU via identity map (in HPPS LOW DRAM)
+    volatile uint32_t *addr = (volatile uint32_t *)0x8e050000;
+    uint32_t val = 0xf00dcafe;
+    printf("%p <- %08x\r\n", addr, val);
+    *addr = val;
+    val = *addr;
+    printf("%p -> %08x\r\n", addr, val);
+
+    // Translated by MMU (test configured to HPPS HIGH DRAM, 0x100000000)
+    addr = (volatile uint32_t *)0xc0000000;
+    val = 0xdeadbeef;
+    printf("%p <- %08x\r\n", addr, val);
+    *addr = val;
+    val = *addr;
+    printf("%p -> %08x\r\n", addr, val);
+#endif // TEST_RTPS_HPPS_MMU
+
 #ifdef TEST_RTPS_TRCH_MAILBOX
     struct mbox_link *rtps_link = mbox_link_connect(
                     LSIO_MBOX_BASE, LSIO_MBOX_IRQ_START,
@@ -126,24 +146,6 @@ int main(void)
     soft_reset();
     printf("ERROR: reached unrechable code: soft reset failed\r\n");
 #endif // TEST_SOFT_RESET
-
-#ifdef TEST_RTPS_HPPS_MMU
-    // Translated by MMU via identity map (in HPPS LOW DRAM)
-    volatile uint32_t *addr = (volatile uint32_t *)0x8e001000;
-    uint32_t val = 0xf00dcafe;
-    printf("%p <- %08x\r\n", addr, val);
-    *addr = val;
-    val = *addr;
-    printf("%p -> %08x\r\n", addr, val);
-
-    // Translated by MMU (test configured to HPPS HIGH DRAM, 0x100000000)
-    addr = (volatile uint32_t *)0xc0000000;
-    val = 0xdeadbeef;
-    printf("%p <- %08x\r\n", addr, val);
-    *addr = val;
-    val = *addr;
-    printf("%p -> %08x\r\n", addr, val);
-#endif // TEST_RTPS_HPPS_MMU
 
     while (1) {
 
