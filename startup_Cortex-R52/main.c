@@ -87,7 +87,7 @@ int main(void)
     printf("Testing MMU...\r\n");
 
     // Translated by MMU via identity map (in HPPS LOW DRAM)
-    volatile uint32_t *addr = (volatile uint32_t *)0x8e050000;
+    volatile uint32_t *addr = (volatile uint32_t *)0x8e100000;
     uint32_t val = 0xf00dcafe;
     printf("%p <- %08x\r\n", addr, val);
     *addr = val;
@@ -96,6 +96,10 @@ int main(void)
 
     // Translated by MMU (test configured to HPPS HIGH DRAM, 0x100000000)
     addr = (volatile uint32_t *)0xc0000000;
+
+    val = *addr;
+    printf("%p -> %08x\r\n", addr, val);
+
     val = 0xdeadbeef;
     printf("%p <- %08x\r\n", addr, val);
     *addr = val;
