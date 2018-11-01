@@ -44,6 +44,7 @@ C_OBJS = \
 	uart.o \
 	printf.o \
 	mem.o \
+	object.o \
 	mailbox.o \
 	command.o \
 	server.o \
