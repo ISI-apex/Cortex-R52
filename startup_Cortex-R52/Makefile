@@ -43,6 +43,7 @@ C_OBJS = \
 	sorts.o \
 	uart.o \
 	printf.o \
+	mem.o \
 	mailbox.o \
 	command.o \
 	server.o \
