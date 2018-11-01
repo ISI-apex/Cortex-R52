@@ -3,7 +3,6 @@
 #include "mailbox.h"
 #include "command.h"
 #include "printf.h"
-#include "busid.h"
 #include "panic.h"
 
 #include "mailbox-link.h"

@@ -13,7 +13,7 @@
 #include "float.h"
 #include "mailbox.h"
 #include "command.h"
-#include "busid.h"
+#include "hwinfo.h"
 #include "panic.h"
 #include "mailbox-link.h"
 #include "mailbox-map.h"

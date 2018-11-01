@@ -7,9 +7,6 @@
 
 struct mbox_link;
 
-// Table with references to all mbox objects by instance number For ISRs
-extern struct mbox *mboxes[HPSC_MBOX_NUM_BLOCKS][HPSC_MBOX_INSTANCES];
-
 // We use 'owner' to indicate both the ID (arbitrary value) to which the
 // mailbox should be claimed (i.e. OWNER HW register should be set) and whether
 // the connection originator is a server or a client: owner!=0 ==> server;

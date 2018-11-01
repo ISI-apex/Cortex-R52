@@ -4,9 +4,35 @@
 #include "intc.h"
 #include "mailbox.h"
 
-#define OFFSET_PAYLOAD 4
+#define REG_CONFIG              0x00
+#define REG_EVENT_CAUSE         0x04
+#define REG_EVENT_CLEAR         0x04
+#define REG_EVENT_STATUS        0x08
+#define REG_EVENT_SET           0x08
+#define REG_INT_ENABLE          0x0C
+#define REG_DATA                0x10
 
-#define MAX_MBOXES (HPSC_MBOX_NUM_BLOCKS * HPSC_MBOX_INSTANCES)
+#define REG_CONFIG__UNSECURE      0x1
+#define REG_CONFIG__OWNER__SHIFT  8
+#define REG_CONFIG__OWNER__MASK   0x0000ff00
+#define REG_CONFIG__SRC__SHIFT    16
+#define REG_CONFIG__SRC__MASK     0x00ff0000
+#define REG_CONFIG__DEST__SHIFT   24
+#define REG_CONFIG__DEST__MASK    0xff000000
+
+#define HPSC_MBOX_EVENT_A 0x1
+#define HPSC_MBOX_EVENT_B 0x2
+
+#define HPSC_MBOX_INT_A(idx) (1 << (2 * (idx)))      // rcv (map event A to int 'idx')
+#define HPSC_MBOX_INT_B(idx) (1 << (2 * (idx) + 1))  // ack (map event B to int 'idx')
+
+#define HPSC_MBOX_EVENTS 2
+#define HPSC_MBOX_INTS   16
+#define HPSC_MBOX_INSTANCES 32
+#define HPSC_MBOX_INSTANCE_REGION (REG_DATA + HPSC_MBOX_DATA_REGS * 4)
+
+#define MAX_BLOCKS 2
+#define MAX_MBOXES 64
 
 struct irq {
         unsigned irq;
@@ -27,10 +53,9 @@ struct mbox {
 };
 
 static struct mbox mboxes[MAX_MBOXES] = {0};
+static volatile uint32_t *blocks[MAX_BLOCKS] = {0}; // [index] => base addr, populated on demand
 
-static volatile uint32_t *blocks[HPSC_MBOX_NUM_BLOCKS] = {0}; // [index] => base addr, populated on demand
-
-static unsigned irq_refcnt[HPSC_MBOX_NUM_BLOCKS][HPSC_MBOX_EVENTS] = {0};
+static unsigned irq_refcnt[MAX_BLOCKS][HPSC_MBOX_EVENTS] = {0};
 
 static void mbox_clear(struct mbox *mbox)
 {
@@ -80,9 +105,9 @@ static void mbox_irq_unsubscribe(struct mbox *mbox)
 static int ip_base_to_block_idx(volatile uint32_t *ip_base)
 {
     unsigned block = 0;
-    while (block < HPSC_MBOX_NUM_BLOCKS && blocks[block] && blocks[block] != ip_base)
+    while (block < MAX_BLOCKS && blocks[block] && blocks[block] != ip_base)
         ++block;
-    if (block == HPSC_MBOX_NUM_BLOCKS)
+    if (block == MAX_BLOCKS)
         return -1;
     if (!blocks[block]) // assert blocks[block] == ip_base
         blocks[block] = ip_base;
